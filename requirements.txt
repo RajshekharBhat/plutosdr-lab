@@ -19,5 +19,9 @@ opencv-python-headless>=4.5
 # ML (system torch with CUDA is used via --system-site-packages)
 # torch  ← already installed system-wide
 
+# FEC — commpy 0.1.x on PyPI is broken; install from GitHub:
+#   pip install git+https://github.com/veeresht/CommPy.git
+# Experiment 09 uses common/fec.py (pure NumPy) so commpy is NOT required.
+
 # Utilities
 tqdm>=4.60

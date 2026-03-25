@@ -23,7 +23,7 @@ ENVIRONMENT
   All packages installed: pyadi-iio 0.0.20, crcmod, Pillow, commpy, torch+CUDA, numpy, scipy
 
 PROJECT STATE (as of 2026-03-25)
-  8 experiments implemented and committed to GitHub:
+  9 experiments implemented and committed to GitHub:
     01 loopback test (EVM, SNR, PSD plot)
     02 text modem — full PHY: ZC preamble sync, Gardner timing, Costas phase, CRC16
     03 image over the air — JPEG packetized TX/RX
@@ -32,14 +32,20 @@ PROJECT STATE (as of 2026-03-25)
     06 channel estimation comparison — LS vs MMSE BER/NMSE curves
     07 fading demo — Rayleigh/Jake's model, multipath PSD, OTA envelope measurement
     08 ML comms — O'Shea autoencoder, learned constellation, AMC CNN classifier
+    09 FEC — convolutional codes (R1/2 K3/K7, R1/3 K3) + hard-decision Viterbi, BER curves + OTA
+
+  NEW in this session:
+    - common/fec.py: pure-NumPy ConvCode class (encoder + vectorised Viterbi decoder)
+      commpy 0.1.x on PyPI is broken (Cython); fec.py is the replacement, no extra deps
+    - experiments/09_fec/fec_demo.py: sim + OTA modes, BER vs Eb/N0, coding gain bar chart
 
 KNOWN NEXT STEPS
-  - Add FEC (convolutional codes via commpy) as Experiment 09
   - Build Experiment 10: live video streaming (cv2 frame → compress → packetize → TX)
   - IQ imbalance correction for QAM64+ (not yet implemented)
   - Adaptive modulation / link adaptation demo
   - GNU Radio integration (gr-iio) as optional alternative interface
   - MIMO demo using both Pluto TX+RX channels simultaneously
+  - Soft-decision Viterbi (unquantized LLR input) as enhancement to Exp 09
 
 CODING CONVENTIONS
   - All experiments import from common/ with sys.path.insert(0, "../../")

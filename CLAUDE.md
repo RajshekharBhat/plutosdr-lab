@@ -47,7 +47,8 @@ plutosdr-lab/
 │   ├── modulation.py           — BPSK/QPSK/QAM16/QAM64 (Gray-coded); RRC pulse shaping
 │   ├── framing.py              — ZC preamble (len=64), SFD, frame build/parse, CRC16-CCITT
 │   ├── dsp.py                  — AGC, DC block, Gardner TED, Costas loop, FLL, M2M4 SNR est.
-│   └── channel.py              — AWGN, multipath FIR, Rayleigh (Jake's), LS/MMSE estimation
+│   ├── channel.py              — AWGN, multipath FIR, Rayleigh (Jake's), LS/MMSE estimation
+│   └── fec.py                  — ConvCode class: rate-1/n encoder + hard-decision Viterbi; CONV_R12_K3/K7, CONV_R13_K3
 │
 └── experiments/
     ├── 01_loopback/            — hardware sanity: EVM, SNR, constellation, PSD
@@ -57,7 +58,8 @@ plutosdr-lab/
     ├── 05_ofdma/               — 256-FFT OFDMA, 4 users, mixed modulations
     ├── 06_channel_estimation/  — LS vs MMSE: BER and NMSE curves vs SNR
     ├── 07_fading_demo/         — Rayleigh/Jake's model, BER under fading, OTA envelope
-    └── 08_ml_comms/            — O'Shea autoencoder, learned constellation, AMC/CNN
+    ├── 08_ml_comms/            — O'Shea autoencoder, learned constellation, AMC/CNN
+    └── 09_fec/                 — convolutional FEC: BER vs Eb/N0, coding gain, OTA test
 ```
 
 ---
@@ -109,6 +111,8 @@ RX chain (in order):
 | Phase recovery | `common/dsp.py` → `CostasLoop` |
 | Channel models | `common/channel.py` → `awgn()`, `rayleigh_fading()`, `multipath_channel()` |
 | OFDM frame | `experiments/04_ofdm/ofdm_modem.py` → `bits_to_ofdm_frame()` |
+| FEC encode/decode | `common/fec.py` → `ConvCode.encode()` / `.decode()` |
+| Predefined codes | `common/fec.py` → `CONV_R12_K3`, `CONV_R12_K7`, `CONV_R13_K3` |
 
 ---
 
@@ -142,14 +146,18 @@ venv/bin/python experiments/07_fading_demo/fading_demo.py --mode ota --fc 915e6
 # 8. ML autoencoder
 venv/bin/python experiments/08_ml_comms/autoencoder_comms.py --mode train --epochs 50
 venv/bin/python experiments/08_ml_comms/autoencoder_comms.py --mode amc
+
+# 9. FEC (convolutional codes + Viterbi)
+venv/bin/python experiments/09_fec/fec_demo.py --mode sim
+venv/bin/python experiments/09_fec/fec_demo.py --mode ota --fc 915e6
 ```
 
 ---
 
 ## Known Issues / Next Steps
 
-- **commpy installed** but not yet wired in — FEC (convolutional/turbo codes) is the natural next experiment
+- **commpy 0.1.x (PyPI) is broken** — Cython compilation issue; `common/fec.py` (pure NumPy) replaces it for Exp 09
 - **Exp 03 video** (not yet built): use `cv2.VideoCapture` + frame-by-frame encoding on top of image_tx pattern
 - **OTA timing offset** between the two Plutos can cause preamble detection to miss — tuning `threshold` in `detect_preamble()` is the first dial to turn
 - **IQ imbalance correction** not yet implemented — relevant at high modulation orders (64QAM+)
-- **Exp 09 ideas**: MIMO (both Plutos as full-duplex via self-interference cancellation), LDPC FEC, adaptive modulation (link adaptation), GNU Radio integration
+- **Exp 10 ideas**: MIMO (both Plutos as full-duplex via self-interference cancellation), LDPC FEC, adaptive modulation (link adaptation), GNU Radio integration, live video streaming
