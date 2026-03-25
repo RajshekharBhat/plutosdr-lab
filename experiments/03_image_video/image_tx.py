@@ -47,7 +47,7 @@ def build_iq(packet: bytes, scheme: str) -> np.ndarray:
     syms   = np.concatenate([preamble_symbols(), bits_to_symbols(framed, scheme)])
     shaped = upsample_and_shape(syms, SPS)
     shaped /= np.max(np.abs(shaped)) * 1.2
-    return (shaped * 2**14).astype(np.int16)
+    return (shaped * 2**14).astype(np.complex64)
 
 
 def run(args):
@@ -56,7 +56,7 @@ def run(args):
     print(f"[TX] Sending {len(packets)} packets  scheme={args.scheme}")
     for i, pkt in enumerate(packets):
         iq = build_iq(pkt, args.scheme)
-        sdr.tx([iq, iq])
+        sdr.tx(iq)
         print(f"\r  Packet {i+1}/{len(packets)}", end="", flush=True)
     sdr.tx_destroy_buffer()
     print("\n[TX] Image transmission complete.")

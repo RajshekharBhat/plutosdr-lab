@@ -24,7 +24,7 @@ ENVIRONMENT
 
 PROJECT STATE (as of 2026-03-25)
   9 experiments implemented and committed to GitHub:
-    01 loopback test (EVM, SNR, PSD plot)
+    01 loopback test — WORKING: BER=0/1024, EVM≈8-12%, SNR≈13-19 dB (hardware verified)
     02 text modem — full PHY: ZC preamble sync, Gardner timing, Costas phase, CRC16
     03 image over the air — JPEG packetized TX/RX
     04 OFDM — 64-FFT, cyclic prefix, pilot LS/MMSE channel estimation
@@ -34,10 +34,25 @@ PROJECT STATE (as of 2026-03-25)
     08 ML comms — O'Shea autoencoder, learned constellation, AMC CNN classifier
     09 FEC — convolutional codes (R1/2 K3/K7, R1/3 K3) + hard-decision Viterbi, BER curves + OTA
 
-  NEW in this session:
+  NEW/FIXED in this session:
     - common/fec.py: pure-NumPy ConvCode class (encoder + vectorised Viterbi decoder)
       commpy 0.1.x on PyPI is broken (Cython); fec.py is the replacement, no extra deps
     - experiments/09_fec/fec_demo.py: sim + OTA modes, BER vs Eb/N0, coding gain bar chart
+    - experiments/01_loopback/loopback_test.py: FULLY FIXED with 3-stage carrier recovery:
+        Stage 1: Coarse CFO from ZC preamble correlation phase slope (~−3.1 to −3.2 kHz)
+        Stage 2: Fine residual CFO from BPSK squaring method (~50−130 Hz)
+        Stage 3: Static phase correction — 4-quadrant search minimising Im² energy (mod 90°)
+        Then: Costas loop at bw_norm=0.005 (MUST normalise amplitude to ±1 BEFORE Costas)
+    - TX/RX format fixed in 6 files: complex64 input to tx(), astype(complex64) on rx() output
+    - detect_preamble: fixed cosine similarity (was dividing by ||zc||² instead of ||zc||)
+
+CARRIER RECOVERY PIPELINE (Exp 01 — the hard-won solution):
+  Key insight: Costas loop error = Re(s)×Im(s) ∝ amplitude². Symbols at amplitude~18
+  (before normalisation) make effective loop BW = 347× too wide → wildly unstable.
+  Solution: normalise to unit amplitude BEFORE running Costas.
+  Key insight 2: squaring method gives theta mod 90° — MUST try all 4 candidates and
+  pick the one with minimum imaginary energy to resolve the quadrant ambiguity.
+  Costas loop is at unstable equilibrium at 90° offset (error=0 there) — will NOT converge.
 
 KNOWN NEXT STEPS
   - Build Experiment 10: live video streaming (cv2 frame → compress → packetize → TX)
@@ -50,8 +65,8 @@ KNOWN NEXT STEPS
 CODING CONVENTIONS
   - All experiments import from common/ with sys.path.insert(0, "../../")
   - SPS=4 throughout, RRC α=0.35, carrier=915 MHz, fs=2 MSPS
-  - TX IQ scaled to int16 (×2^14), passed as [iq, iq]
-  - RX: raw[0]=I, raw[1]=Q (int16 from adi.Pluto.rx())
+  - TX IQ: (shaped * 2**14).astype(np.complex64), pass directly to sdr.tx(iq)
+  - RX: raw = sdr.rx() returns complex128 array; do raw.astype(np.complex64)
   - Plots saved as PNG (matplotlib Agg backend, headless server)
   - Git commit after every significant change
 

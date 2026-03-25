@@ -37,7 +37,7 @@ def build_tx_buffer(text: str, scheme: str) -> np.ndarray:
     guard   = np.zeros(GUARD_LEN)
     full    = np.concatenate([shaped, guard])
     full   /= np.max(np.abs(full)) * 1.2
-    return (full * 2**14).astype(np.int16)
+    return (full * 2**14).astype(np.complex64)
 
 
 def run(args):
@@ -55,7 +55,7 @@ def run(args):
     n   = 0
     try:
         while True:
-            sdr.tx([iq, iq])
+            sdr.tx(iq)
             n += 1
             print(f"\r[TX] Frame #{n} sent", end="", flush=True)
             if not args.cyclic:

@@ -37,7 +37,7 @@ def decode_packet(raw_bytes: bytes):
 def receive_and_decode(sdr, scheme: str, fs: float):
     """Pull one RX buffer and return list of (n_pkts, idx, payload)."""
     raw  = sdr.rx()
-    x    = raw[0].astype(np.float32) + 1j * raw[1].astype(np.float32)
+    x    = raw.astype(np.complex64)
     x    = remove_dc(x)
     x    = agc(x)
     zc   = preamble_symbols()

@@ -106,7 +106,7 @@ def run():
     try:
         while True:
             raw = sdr.rx()
-            iq  = raw[0].astype(np.float32) + 1j * raw[1].astype(np.float32)
+            iq  = raw.astype(np.complex64)
             msgs = process_block(iq, args.scheme, args.fs)
             for text, snr, corr in msgs:
                 n_received += 1

@@ -207,15 +207,14 @@ def _build_burst(info_bits: np.ndarray, code: ConvCode | None) -> np.ndarray:
     guard    = np.zeros(GUARD_LEN)
     full     = np.concatenate([shaped, guard])
     full    /= np.max(np.abs(full)) * 1.2
-    return (full * 2**14).astype(np.int16)
+    return (full * 2**14).astype(np.complex64)
 
 
 def _rx_decode(sdr_rx, n_payload_syms: int, code: ConvCode | None,
                n_info_bits: int, fs: float):
     """Capture one burst and return decoded bits (or None if no preamble)."""
     raw   = sdr_rx.rx()
-    raw_c = (raw[0].astype(np.float32)
-             + 1j * raw[1].astype(np.float32))
+    raw_c = raw.astype(np.complex64)
     raw_c = remove_dc(raw_c)
     raw_c = agc(raw_c)
 
@@ -263,7 +262,7 @@ def run_ota(args):
             ("fec",     True,  n_coded),
         ]:
             iq = _build_burst(info_bits, code if use_fec else None)
-            tx.tx([iq, iq])
+            tx.tx(iq)
             bits = _rx_decode(rx, n_syms, code if use_fec else None,
                               N_INFO_OTA, args.fs)
             if bits is None:

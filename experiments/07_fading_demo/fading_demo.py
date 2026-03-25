@@ -141,15 +141,15 @@ def ota_measure(args):
     tx, rx = connect_both(fc=args.fc, fs=1e6, gain_att=-40, gain_db=60)
     N_buf  = 2**16
 
-    # CW tone
-    cw = np.ones(N_buf, dtype=np.int16) * 8192
-    tx.tx([cw, cw])
+    # CW tone (complex, DC = constant envelope)
+    cw = np.ones(N_buf, dtype=np.complex64) * 8192
+    tx.tx(cw)
 
     print(f"[OTA] CW tone TX at {args.fc/1e6:.3f} MHz. Recording envelope...")
     bufs = []
     for i in range(10):
         raw = rx.rx()
-        iq  = raw[0].astype(float) + 1j * raw[1].astype(float)
+        iq  = raw.astype(np.complex64)
         bufs.append(iq)
         print(f"\r  Buffer {i+1}/10", end="", flush=True)
     tx.tx_destroy_buffer()

@@ -100,23 +100,34 @@ def parse_frame(bits: np.ndarray):
 
 # ---------- Preamble correlation detector ----------
 
-def detect_preamble(rx_syms: np.ndarray, threshold: float = 0.6):
+def detect_preamble(rx_syms: np.ndarray, threshold: float = 0.5):
     """
     Slide ZC preamble over rx_syms and return list of detected start indices
-    where normalised correlation exceeds threshold.
+    where cosine-similarity (normalised correlation) exceeds threshold.
+
+    Metric = |<seg, conj(zc)>| / (||seg|| * ||zc||)  ∈ [0, 1].
+    1.0 = perfect match (any phase offset), 0 = uncorrelated noise.
+    Typical threshold: 0.5 (loose) to 0.7 (strict).
     """
-    zc  = preamble_symbols()
-    L   = len(zc)
-    N   = len(rx_syms)
+    zc        = preamble_symbols()
+    L         = len(zc)
+    N         = len(rx_syms)
+    zc_norm   = np.linalg.norm(zc)                 # = √L  (unit-magnitude ZC)
+    zc_conj   = np.conj(zc) / zc_norm              # pre-normalised template
     positions = []
-    zc_conj_norm = np.conj(zc) / (np.linalg.norm(zc) ** 2)
-    for i in range(N - L + 1):
-        seg   = rx_syms[i:i + L]
-        corr  = np.abs(np.dot(seg, zc_conj_norm)) / np.linalg.norm(seg)
+    i = 0
+    while i <= N - L:
+        seg  = rx_syms[i : i + L]
+        seg_n = np.linalg.norm(seg)
+        if seg_n < 1e-9:
+            i += 1
+            continue
+        corr = np.abs(np.dot(seg, zc_conj)) / seg_n   # cosine similarity
         if corr > threshold:
-            positions.append((i, corr))
-            # skip ahead to avoid multiple detections for same preamble
-            # (simple peak picking; replace with max-correlation for robustness)
+            positions.append((i, float(corr)))
+            i += L       # skip past this detection to avoid duplicate hits
+        else:
+            i += 1
     return positions
 
 
