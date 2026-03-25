@@ -1,0 +1,23 @@
+# PlutoSDR Lab — Python dependencies
+# Install with: venv/bin/pip install -r requirements.txt
+
+# SDR interface
+pyadi-iio>=0.0.20
+
+# Signal processing (usually via system site-packages)
+numpy>=1.21
+scipy>=1.7
+matplotlib>=3.4
+
+# Framing / encoding
+crcmod>=1.7
+
+# Image / video
+Pillow>=9.0
+opencv-python-headless>=4.5
+
+# ML (system torch with CUDA is used via --system-site-packages)
+# torch  ← already installed system-wide
+
+# Utilities
+tqdm>=4.60

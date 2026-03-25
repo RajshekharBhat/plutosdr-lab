@@ -1,0 +1,36 @@
+Metadata-Version: 2.4
+Name: commpy
+Version: 0.1.2
+Summary: Python Library for Communication Engineering.
+Author-email: Marvin Elling <mane.der@web.de>
+License: Apache 2.0
+Project-URL: Homepage, https://github.com/MarvinElling/CommPy
+Project-URL: Iussues, https://github.com/MarvinElling/CommPy/issues
+Keywords: Communication,Information,Information Theory,Signal Processing,Engineering,AI,Machine Learning,Shannon,Entropy
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Topic :: Scientific/Engineering
+Classifier: Typing :: Typed
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: matplotlib
+Provides-Extra: dev
+Requires-Dist: isort; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: yapf; extra == "dev"
+Dynamic: license-file
+
+# CommPy
+
