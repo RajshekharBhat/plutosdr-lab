@@ -56,19 +56,23 @@ def example_multipath_channel():
 def rayleigh_fading(n_samples: int, doppler_hz: float, fs: float) -> np.ndarray:
     """
     Generate a Rayleigh flat-fading envelope using sum-of-sinusoids (Jake's model).
+    Vectorised: builds (N_osc × n_samples) phase matrix in one shot.
     Returns complex envelope h[n] of length n_samples.
     """
     N_osc = 32
-    theta = np.random.uniform(0, 2 * np.pi, N_osc)
-    phi   = np.random.uniform(0, 2 * np.pi, N_osc)
-    f_d   = doppler_hz
-    t     = np.arange(n_samples) / fs
-    h_i   = sum(np.cos(2 * np.pi * f_d * np.cos(2 * np.pi * k / N_osc + theta[k]) * t + phi[k])
-                for k in range(N_osc))
-    h_q   = sum(np.cos(2 * np.pi * f_d * np.sin(2 * np.pi * k / N_osc + theta[k]) * t + phi[k])
-                for k in range(N_osc))
-    h     = (h_i + 1j * h_q) / np.sqrt(2 * N_osc)
-    return h
+    theta = np.random.uniform(0, 2 * np.pi, N_osc)          # (N_osc,)
+    phi   = np.random.uniform(0, 2 * np.pi, N_osc)          # (N_osc,)
+    t     = np.arange(n_samples) / fs                       # (N,)
+    alpha = 2 * np.pi * np.arange(N_osc) / N_osc + theta   # (N_osc,)
+    # Doppler frequency per oscillator: (N_osc,)
+    f_i   = doppler_hz * np.cos(alpha)
+    f_q   = doppler_hz * np.sin(alpha)
+    # Phase matrices: (N_osc, N) via broadcasting
+    ph_i  = 2 * np.pi * f_i[:, None] * t[None, :] + phi[:, None]
+    ph_q  = 2 * np.pi * f_q[:, None] * t[None, :] + phi[:, None]
+    h_i   = np.sum(np.cos(ph_i), axis=0)                    # (N,)
+    h_q   = np.sum(np.cos(ph_q), axis=0)
+    return (h_i + 1j * h_q) / np.sqrt(2 * N_osc)
 
 
 def apply_fading(x: np.ndarray, h: np.ndarray) -> np.ndarray:
@@ -112,3 +116,69 @@ def mmse_channel_estimate(Y_pilots: np.ndarray, X_pilots: np.ndarray,
     N     = len(H_ls)
     W     = R_hh @ np.linalg.inv(R_hh + (1 / snr_lin) * np.eye(N))
     return W @ H_ls
+
+
+# ---------- Rician fading ----------
+
+def rician_fading(n_samples: int, doppler_hz: float, fs: float,
+                  K_linear: float = 0.0) -> np.ndarray:
+    """
+    Generate Rician flat-fading envelope (sum-of-sinusoids + LOS).
+    K_linear = 0        → Rayleigh (no LOS).
+    K_linear > 0        → Rician; K = P_LOS / P_scatter.
+    Total power is normalised to 1.
+    """
+    scatter = rayleigh_fading(n_samples, doppler_hz, fs)
+    # Normalise scatter to unit power
+    rms = np.sqrt(np.mean(np.abs(scatter) ** 2)) + 1e-12
+    scatter = scatter / rms
+    # Scale scatter power to 1/(K+1)
+    scatter_scaled = scatter / np.sqrt(K_linear + 1)
+    if K_linear <= 0.0:
+        return scatter_scaled
+    # LOS component: power = K/(K+1), random initial phase
+    phi_los = np.random.uniform(0, 2 * np.pi)
+    los = np.sqrt(K_linear / (K_linear + 1)) * np.exp(1j * phi_los)
+    return scatter_scaled + los
+
+
+# ---------- PDP statistics ----------
+
+def pdp_stats(h_td: np.ndarray, fs: float):
+    """
+    Compute PDP-derived channel statistics from a CIR vector h_td.
+
+    Returns
+    -------
+    mean_delay_s  : mean excess delay  (seconds)
+    rms_delay_s   : RMS delay spread σ_τ  (seconds)
+    B_c_50_hz     : coherence bandwidth (50% criterion)  ≈ 1/(5 σ_τ)
+    B_c_90_hz     : coherence bandwidth (90% criterion)  ≈ 1/(2π σ_τ)
+    n_sig_taps    : number of taps above 1% of peak power
+    """
+    pdp = np.abs(h_td) ** 2
+    total = pdp.sum()
+    if total == 0.0:
+        return 0.0, 0.0, np.inf, np.inf, 0
+    pdp_n  = pdp / total
+    delays = np.arange(len(h_td)) / fs          # seconds
+    mean_d = float(np.dot(delays, pdp_n))
+    rms_d  = float(np.sqrt(np.dot((delays - mean_d) ** 2, pdp_n)))
+    B_50   = 1.0 / (5.0 * rms_d)      if rms_d > 0 else np.inf
+    B_90   = 1.0 / (2 * np.pi * rms_d) if rms_d > 0 else np.inf
+    n_taps = int(np.sum(pdp > pdp.max() * 0.01))
+    return mean_d, rms_d, B_50, B_90, n_taps
+
+
+# ---------- Jake's Doppler PSD ----------
+
+def jakes_doppler_psd(f_range: np.ndarray, f_d: float) -> np.ndarray:
+    """
+    Jake's theoretical U-shaped Doppler PSD.
+    S(f) = 1 / (π f_d √(1 - (f/f_d)²))   for |f| < f_d
+    Returns zero outside the Doppler bandwidth.
+    """
+    psd  = np.zeros_like(f_range, dtype=float)
+    mask = np.abs(f_range) < f_d * 0.999
+    psd[mask] = 1.0 / (np.pi * f_d * np.sqrt(1.0 - (f_range[mask] / f_d) ** 2))
+    return psd
