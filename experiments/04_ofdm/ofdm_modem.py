@@ -123,15 +123,23 @@ def simulate(args):
     rx      = np.convolve(td, h_mp)[:len(td)]
     rx      = awgn(rx, args.snr)
 
-    decoded = decode_ofdm_burst(rx, n_syms, scheme)
-    ber_bits = np.unpackbits(np.frombuffer(text.encode(), dtype=np.uint8))
-    dec_bits = np.unpackbits(np.frombuffer(decoded[:len(text)].encode(), errors="replace"), dtype=np.uint8)
-    ber = np.mean(ber_bits[:len(dec_bits)] != dec_bits[:len(ber_bits)])
+    # BER: compare raw bit arrays (avoids multi-byte UTF-8 counting issues)
+    tx_bits  = np.unpackbits(np.frombuffer(text.encode(), dtype=np.uint8))
+    sym_len  = N_FFT + N_CP
+    rx_bits_list = []
+    for i in range(n_syms):
+        seg  = rx[i * sym_len : i * sym_len + sym_len]
+        bits_sym, _ = ofdm_frame_to_bits(seg[N_CP:], scheme)
+        rx_bits_list.append(bits_sym)
+    rx_bits  = np.concatenate(rx_bits_list)
+    n_cmp    = min(len(tx_bits), len(rx_bits))
+    ber      = np.mean(tx_bits[:n_cmp] != rx_bits[:n_cmp])
 
+    decoded  = decode_ofdm_burst(rx, n_syms, scheme)
     print(f"OFDM Simulation: scheme={scheme}  SNR={args.snr} dB")
     print(f"  Tx: {text}")
     print(f"  Rx: {decoded.strip()}")
-    print(f"  BER: {ber:.4f}")
+    print(f"  BER: {ber:.4f}  ({int(ber*n_cmp)}/{n_cmp} bit errors)")
 
     # Constellation of one symbol
     sym_len = N_FFT + N_CP
@@ -150,7 +158,7 @@ def simulate(args):
     axes[1].set_title("Channel Magnitude (estimated)")
     axes[1].set_xlabel("Subcarrier"); axes[1].set_ylabel("|H|")
 
-    axes[2].stem(np.abs(h_mp), use_line_collection=True)
+    axes[2].stem(np.abs(h_mp))
     axes[2].set_title("True Channel Impulse Response")
     axes[2].set_xlabel("Tap"); axes[2].set_ylabel("|h|")
 

@@ -98,14 +98,16 @@ class AutoencoderComms(nn.Module):
 # ---------- Training ----------
 
 def train_autoencoder(args):
+    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     M       = 2 ** args.k   # constellation size
     n       = args.n_uses
-    model   = AutoencoderComms(M=M, n=n, snr_db=args.train_snr)
+    model   = AutoencoderComms(M=M, n=n, snr_db=args.train_snr).to(device)
     optim_  = optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.CrossEntropyLoss()
 
     B       = 256   # batch size
-    print(f"Training autoencoder: M={M} ({args.k} bits/symbol), n={n}, SNR={args.train_snr} dB")
+    print(f"Training autoencoder: M={M} ({args.k} bits/symbol), n={n}, "
+          f"SNR={args.train_snr} dB  device={device}")
 
     history = []
     for epoch in range(args.epochs):
@@ -115,6 +117,7 @@ def train_autoencoder(args):
         ds  = DataLoader(TensorDataset(one_hot, msgs), batch_size=B, shuffle=True)
         ep_loss = 0.0
         for xb, yb in ds:
+            xb, yb = xb.to(device), yb.to(device)
             optim_.zero_grad()
             out, _ = model(xb)
             loss   = loss_fn(out, yb)
@@ -216,45 +219,62 @@ def train_amc(args):
     from common.modulation import bits_to_symbols
     schemes   = ["BPSK", "QPSK", "QAM16", "QAM64"]
     L         = 128    # samples per observation
-    N_train   = 2000
+    N_train   = 500    # per class (2000 total) — fast demo; use 2000 for better accuracy
     snr_db    = 15.0
 
     def make_dataset(n_per_class):
-        X, Y = [], []
+        """Fully vectorised: draw random constellation points directly."""
+        from common.modulation import CONSTELLATIONS
+        X_all, Y_all = [], []
+        snr_lin   = 10 ** (snr_db / 10)
+        noise_std = np.sqrt(1 / (2 * snr_lin))
         for label, scheme in enumerate(schemes):
-            for _ in range(n_per_class):
-                bits = np.random.randint(0, 2, L * 6).astype(np.uint8)
-                syms = bits_to_symbols(bits, scheme)[:L]
-                snr  = 10 ** (snr_db / 10)
-                noise = np.sqrt(1/(2*snr)) * (np.random.randn(len(syms)) +
-                                               1j*np.random.randn(len(syms)))
-                rx   = syms + noise
-                iq   = np.stack([np.real(rx), np.imag(rx)])   # (2, L)
-                X.append(iq.astype(np.float32))
-                Y.append(label)
-        return (torch.tensor(np.array(X)),
-                torch.tensor(np.array(Y), dtype=torch.long))
+            table = CONSTELLATIONS[scheme][0]       # complex constellation table
+            M     = len(table)
+            # Draw random symbol indices, look up constellation points
+            idx   = np.random.randint(0, M, (n_per_class, L))
+            syms  = table[idx]                      # (n, L) complex
+            noise = noise_std * (np.random.randn(n_per_class, L) +
+                                 1j * np.random.randn(n_per_class, L))
+            rx    = syms + noise                    # (n, L)
+            iq    = np.stack([np.real(rx), np.imag(rx)],
+                              axis=1).astype(np.float32)   # (n, 2, L)
+            X_all.append(iq)
+            Y_all.extend([label] * n_per_class)
+        return (torch.from_numpy(np.concatenate(X_all)),
+                torch.tensor(Y_all, dtype=torch.long))
 
-    print(f"Training AMC classifier: {schemes}  SNR={snr_db} dB")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Training AMC classifier: {schemes}  SNR={snr_db} dB  "
+          f"N={N_train}/class  epochs={args.epochs}  device={device}")
     Xtr, Ytr = make_dataset(N_train)
-    Xte, Yte = make_dataset(500)
+    Xte, Yte = make_dataset(200)
 
-    model   = AMCNet(n_classes=len(schemes), seq_len=L)
+    model   = AMCNet(n_classes=len(schemes), seq_len=L).to(device)
     opt     = optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.CrossEntropyLoss()
-    ds      = DataLoader(TensorDataset(Xtr, Ytr), batch_size=64, shuffle=True)
+    ds      = DataLoader(TensorDataset(Xtr, Ytr), batch_size=256, shuffle=True)
 
     for epoch in range(args.epochs):
         model.train()
+        total_loss = 0.0
         for xb, yb in ds:
+            xb, yb = xb.to(device), yb.to(device)
             opt.zero_grad()
-            loss_fn(model(xb), yb).backward()
+            l = loss_fn(model(xb), yb)
+            l.backward()
             opt.step()
+            total_loss += l.item()
+        if (epoch + 1) % 5 == 0 or epoch == 0:
+            print(f"  Epoch {epoch+1:3d}/{args.epochs}  "
+                  f"loss={total_loss/len(ds):.4f}")
 
     model.eval()
     with torch.no_grad():
-        acc = (model(Xte).argmax(1) == Yte).float().mean().item()
+        Xte_d = Xte.to(device)
+        acc = (model(Xte_d).argmax(1).cpu() == Yte).float().mean().item()
     print(f"  AMC test accuracy: {acc*100:.1f}%")
+    model.cpu()
     torch.save(model.state_dict(), "amc_model.pt")
     print("  Saved: amc_model.pt")
 

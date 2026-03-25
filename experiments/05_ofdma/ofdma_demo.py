@@ -116,7 +116,7 @@ def run(args):
 
     # TX spectrum
     ax = axes[0, 0]
-    ax.stem(np.abs(fd_tx), use_line_collection=True, markerfmt="C0.", linefmt="C0-")
+    ax.stem(np.abs(fd_tx), markerfmt="C0.", linefmt="C0-")
     for uid, (subcs, scheme, label) in USER_ALLOC.items():
         ax.axvspan(subcs[0], subcs[-1], alpha=0.15,
                    color=f"C{uid+1}", label=label)
@@ -126,7 +126,7 @@ def run(args):
 
     # RX spectrum
     ax = axes[0, 1]
-    ax.stem(np.abs(fd_rx), use_line_collection=True, markerfmt="C1.", linefmt="C1-")
+    ax.stem(np.abs(fd_rx), markerfmt="C1.", linefmt="C1-")
     ax.set_title(f"RX Spectrum (SNR={args.snr} dB)")
     ax.set_xlabel("Subcarrier"); ax.set_ylabel("|Y[k]|")
 

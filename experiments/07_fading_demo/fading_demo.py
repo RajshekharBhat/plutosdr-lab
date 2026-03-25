@@ -106,7 +106,7 @@ def simulate(args):
     ax.set_xlabel("Frequency (kHz)"); ax.set_ylabel("PSD (dB/Hz)"); ax.grid(True)
 
     ax = axes[1, 0]
-    ax.stem(np.arange(20), np.abs(ch_out[:20]), use_line_collection=True)
+    ax.stem(np.arange(20), np.abs(ch_out[:20]))
     ax.set_title("Channel Impulse Response"); ax.set_xlabel("Delay (samples)")
     ax.set_ylabel("|h|"); ax.grid(True)
 

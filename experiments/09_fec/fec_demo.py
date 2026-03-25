@@ -170,12 +170,16 @@ def run_sim(args):
     bar_lbls = [CODES[k][1].replace("(NASA)", "").strip() for k in valid_k]
     bcols    = [c for c, k in zip(colors, CODES) if k in valid_k]
 
-    bars = ax2.bar(bar_lbls, bar_vals, color=bcols, edgecolor="k", linewidth=0.8)
-    ax2.bar_label(bars, fmt="%.1f dB", padding=3, fontsize=10)
+    if bar_vals:
+        bars = ax2.bar(bar_lbls, bar_vals, color=bcols, edgecolor="k", linewidth=0.8)
+        ax2.bar_label(bars, fmt="%.1f dB", padding=3, fontsize=10)
+        ax2.set_ylim([0.0, max(bar_vals) * 1.4 + 0.5])
+    else:
+        ax2.text(0.5, 0.5, "Increase --ebn0_max to see\ncoding gain at BER=10⁻³",
+                 ha="center", va="center", transform=ax2.transAxes, fontsize=10)
     ax2.set_ylabel("Coding Gain (dB) @ BER = 10⁻³")
     ax2.set_title("Coding Gain vs Uncoded BPSK\n(Hard-Decision Viterbi)")
     ax2.grid(True, axis="y", ls="--", alpha=0.5)
-    ax2.set_ylim([0.0, max(bar_vals) * 1.4 + 0.5])
     plt.setp(ax2.get_xticklabels(), rotation=12, ha="right", fontsize=8)
 
     plt.tight_layout()
@@ -212,30 +216,83 @@ def _build_burst(info_bits: np.ndarray, code: ConvCode | None) -> np.ndarray:
 
 def _rx_decode(sdr_rx, n_payload_syms: int, code: ConvCode | None,
                n_info_bits: int, fs: float):
-    """Capture one burst and return decoded bits (or None if no preamble)."""
-    raw   = sdr_rx.rx()
-    raw_c = raw.astype(np.complex64)
+    """Capture one burst and return decoded bits (or None if no preamble).
+
+    Uses the 3-stage carrier recovery pipeline from Exp01:
+      1. Coarse CFO from ZC preamble (symbol-rate domain)
+      2. Fine residual CFO + static phase via BPSK squaring method
+      3. Costas loop after amplitude normalisation
+    """
+    from common.dsp import CostasLoop
+    raw_c = sdr_rx.rx().astype(np.complex64)
     raw_c = remove_dc(raw_c)
     raw_c = agc(raw_c)
 
-    zc_len = len(preamble_symbols())
-    fo_hz  = coarse_freq_offset(raw_c[:zc_len * 2], fs)
-    raw_c  = correct_freq_offset(raw_c, fo_hz, fs)
-
-    mf     = match_filter(raw_c, SPS)
+    zc     = preamble_symbols()
+    zc_len = len(zc)
+    fs_sym = fs / SPS
     delay  = len(rrc_filter(SPS)) - 1
-    syms   = mf[delay::SPS]
 
-    positions = detect_preamble(syms, threshold=0.45)
-    if not positions:
+    # ---- Pass 1: find timing phase + coarse CFO ----
+    mf1    = match_filter(raw_c, SPS)[delay:]
+    best   = (0.0, 0, 0, None)
+    for phase in range(SPS):
+        syms_p = mf1[phase::SPS]
+        for pos, corr in detect_preamble(syms_p, threshold=0.4):
+            if corr > best[0]:
+                best = (corr, phase, pos, syms_p)
+    if best[3] is None:
+        return None
+    _, phase1, pre_pos1, syms1 = best
+
+    pre_seg = syms1[pre_pos1 : pre_pos1 + zc_len]
+    if len(pre_seg) < zc_len:
+        return None
+    fo_coarse = coarse_freq_offset(pre_seg, fs_sym)
+
+    # ---- Pass 2: re-detect after coarse CFO correction ----
+    raw_c2  = correct_freq_offset(raw_c, fo_coarse, fs)
+    mf2     = match_filter(raw_c2, SPS)[delay:]
+    best2   = (0.0, 0, 0, None)
+    for phase in range(SPS):
+        syms_p = mf2[phase::SPS]
+        for pos, corr in detect_preamble(syms_p, threshold=0.4):
+            if corr > best2[0]:
+                best2 = (corr, phase, pos, syms_p)
+    if best2[3] is None:
+        return None
+    _, _, pre_pos2, syms2 = best2
+
+    data_syms = syms2[pre_pos2 + zc_len :]
+    if len(data_syms) < n_payload_syms:
         return None
 
-    start   = positions[0][0] + zc_len
-    payload = syms[start: start + n_payload_syms]
-    if len(payload) < n_payload_syms:
-        return None
+    # ---- Pass 3: fine CFO + static phase (BPSK squaring) ----
+    n_est    = min(256, len(data_syms))
+    sq       = data_syms[:n_est] ** 2
+    phi_diff = np.angle(np.sum(sq[1:] * np.conj(sq[:-1])))
+    fo_fine  = phi_diff * fs_sym / (2 * np.pi * 2)
+    t_sym    = np.arange(len(data_syms)) / fs_sym
+    data_fc  = data_syms * np.exp(-1j * 2 * np.pi * fo_fine * t_sym)
 
-    hard = (payload.real > 0).astype(np.uint8)
+    sq_corr    = data_fc[:n_est] ** 2
+    theta_base = np.angle(np.mean(sq_corr)) / 2
+    best_score, best_theta = np.inf, theta_base
+    for k in range(4):
+        cand  = theta_base + k * np.pi / 2
+        score = np.mean(np.imag(data_fc[:n_est] * np.exp(-1j * cand)) ** 2)
+        if score < best_score:
+            best_score, best_theta = score, cand
+    data_corr = data_fc * np.exp(-1j * best_theta)
+
+    # Normalise amplitude then Costas
+    rms = np.sqrt(np.mean(np.abs(data_corr) ** 2)) + 1e-9
+    data_corr = data_corr / rms
+    costas    = CostasLoop(order=2, bw_norm=0.005)
+    data_corr = costas.step(data_corr)
+
+    payload = data_corr[:n_payload_syms]
+    hard    = (payload.real > 0).astype(np.uint8)
     return code.decode(hard, n_info_bits) if code is not None else hard[:n_info_bits]
 
 
