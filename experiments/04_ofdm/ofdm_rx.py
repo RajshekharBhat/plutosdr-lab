@@ -237,6 +237,6 @@ if __name__ == "__main__":
     p.add_argument("--gain",      type=float, default=50.0)
     p.add_argument("--n_frames",  type=int,   default=20)
     p.add_argument("--max_syms",  type=int,   default=50)
-    p.add_argument("--threshold", type=float, default=0.30,
+    p.add_argument("--threshold", type=float, default=0.50,
                    help="Preamble detection normalised-corr threshold (0–1)")
     run(p.parse_args())
