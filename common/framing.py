@@ -35,9 +35,12 @@ SCHEME_INV = {v: k for k, v in SCHEME_MAP.items()}
 
 
 def _zc_sequence(length: int, root: int = ZC_ROOT) -> np.ndarray:
-    """Complex Zadoff-Chu sequence of given length."""
+    """Complex Zadoff-Chu sequence of given length.
+    Odd N:  exp(-j pi r n(n+1) / N)   Even N: exp(-j pi r n^2 / N)
+    """
     n = np.arange(length)
-    return np.exp(-1j * np.pi * root * n * (n + 1) / length)
+    exponent = n * (n + 1) if length % 2 == 1 else n ** 2
+    return np.exp(-1j * np.pi * root * exponent / length)
 
 
 def preamble_symbols() -> np.ndarray:

@@ -40,8 +40,10 @@ ACTIVE_IDX = np.sort(np.concatenate([DATA_IDX, PILOT_IDX]))
 
 
 def _zc(length: int, order: int = 1) -> np.ndarray:
+    """Odd N: n(n+1)/N  |  Even N: n^2/N"""
     n = np.arange(length)
-    return np.exp(-1j * np.pi * order * n * (n + 1) / length)
+    exponent = n * (n + 1) if length % 2 == 1 else n ** 2
+    return np.exp(-1j * np.pi * order * exponent / length)
 
 
 ZC_ACTIVE = _zc(len(ACTIVE_IDX))

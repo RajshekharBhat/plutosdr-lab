@@ -36,9 +36,13 @@ ACTIVE_IDX = np.sort(np.concatenate([DATA_IDX, PILOT_IDX]))            # 52 subs
 
 
 def _zc(length: int, order: int = 1) -> np.ndarray:
-    """Zadoff-Chu sequence of given length."""
+    """Zadoff-Chu sequence of given length.
+    Odd N:  x[n] = exp(-j pi q n(n+1) / N)   — CAZAC property holds
+    Even N: x[n] = exp(-j pi q n^2    / N)   — correct form for even N
+    """
     n = np.arange(length)
-    return np.exp(-1j * np.pi * order * n * (n + 1) / length)
+    exponent = n * (n + 1) if length % 2 == 1 else n ** 2
+    return np.exp(-1j * np.pi * order * exponent / length)
 
 
 # Pre-compute ZC pilots: 52-point ZC mapped to active subcarriers
