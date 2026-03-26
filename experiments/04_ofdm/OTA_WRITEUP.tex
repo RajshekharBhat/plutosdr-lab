@@ -85,22 +85,39 @@ timing reference and the channel estimate; the pair enables CFO estimation.
 
 \subsection{Subcarrier Map (64-point FFT)}
 
+Each FFT bin spans $F_s/N = 2\,\text{MHz}/64 = 31.25\,\text{kHz}$.
+
 \begin{center}
-\begin{tabular}{lll}
+\begin{tabular}{p{3.5cm}p{3cm}cp{5cm}}
 \toprule
-\textbf{Subcarriers} & \textbf{Indices} & \textbf{Count} \\
+\textbf{Subcarriers} & \textbf{Indices} & \textbf{Count} & \textbf{Reason nulled} \\
 \midrule
-DC + upper guard & 0, 27--37 & 12 \\
-Data & all others not in pilots/null & 48 \\
-Pilots & 7, 21, 43, 57 & 4 \\
+DC & 0 & 1 & LO leakage in direct-conversion radio appears at DC; always nulled \\
+Guard band & 27--37 & 11 &
+  These straddle the Nyquist point (bin~32 $= F_s/2 = 1\,\text{MHz}$).
+  Nulling them gives the anti-alias filter room to roll off without
+  corrupting edge subcarriers. \\
 \midrule
-Active (data + pilots) & & 52 \\
+Data & 1--26, 38--63 minus pilots & 48 & Carry payload bits \\
+Pilots & 7, 21, 43, 57 & 4 &
+  Transmitted with known ZC values; \emph{not used by the current RX}
+  (see note below). \\
+\midrule
+Active (data + pilots) & & 52 & \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The \texttt{NULL\_IDX} set mirrors 802.11a/g (Wi-Fi) guard subcarrier
-placement, so the spectrum is compatible with standard spectral masks.
+\paragraph{Note on pilots.}
+The TX inserts known ZC values on the 4 pilot subcarriers of \emph{every data
+symbol}.  In a production receiver these would be used to \emph{track}
+phase and amplitude drift on a symbol-by-symbol basis (phase-locked loop
+per subcarrier, or least-squares update each symbol).  The current RX
+does \textbf{not} use them: it applies the single preamble-based channel
+estimate $\hat{H}[k]$ to all data symbols unchanged.  This is sufficient
+when the channel is stable over the frame duration (which it is for a
+static indoor link).  A natural extension is to update $\hat{H}[k]$ each
+symbol using the pilot subcarriers --- see Exercise~6.
 
 \subsection{RX Pipeline}
 
@@ -558,8 +575,14 @@ print('released')
 
   \item \textbf{Add a length field.}  The current frame has no header telling
     the RX how many data symbols to decode.  Add a 1-byte header as the first
-    data symbol (with a known pilot scheme) so the RX can set \texttt{max\_syms}
-    automatically.
+    data symbol so the RX can set \texttt{max\_syms} automatically.
+
+  \item \textbf{Use pilots for per-symbol channel tracking.}
+    Currently the 4 pilot subcarriers (indices 7, 21, 43, 57) are transmitted
+    with known ZC values but the RX ignores them.  Modify \texttt{decode\_frame}
+    to re-estimate $\hat{H}[k]$ at the pilot positions for each data symbol and
+    update the interpolated channel before equalising that symbol.  This helps
+    when the channel changes during a long burst.
 \end{enumerate}
 
 % ─────────────────────────────────────────────────────────────────────────────
