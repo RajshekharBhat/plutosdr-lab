@@ -185,10 +185,12 @@ even-$N$ formula.
 
 \begin{lstlisting}
 def _zc(length, order=1):
+    """Odd N: n(n+1)/N  |  Even N: n^2/N"""
     n = np.arange(length)
-    return np.exp(-1j * np.pi * order * n * (n + 1) / length)
+    exponent = n * (n + 1) if length % 2 == 1 else n ** 2
+    return np.exp(-1j * np.pi * order * exponent / length)
 
-ZC_ACTIVE = _zc(52)          # 52-point ZC on active subcarriers
+ZC_ACTIVE = _zc(52)          # 52-point ZC, even N → uses n^2 form
 
 # Build preamble OFDM symbol (with CP)
 fd = np.zeros(64, dtype=complex)
@@ -199,6 +201,59 @@ preamble = np.concatenate([td[-16:], td])   # prepend CP
 
 The preamble symbol therefore looks like a normal OFDM symbol except every
 active subcarrier carries a known ZC value.
+
+% ── Barker note ──────────────────────────────────────────────────────────────
+\subsection{Aside: Why Not a Barker Sequence?}
+
+In a single-carrier system (e.g.\ in Digital Communications courses), the
+standard choice for frame synchronisation is a \textbf{Barker sequence} ---
+a binary $(\pm 1)$ sequence with the best possible \emph{aperiodic}
+autocorrelation:
+\begin{equation}
+  |R_{\text{Barker}}[\tau]| \leq 1 \quad \text{for all } \tau \neq 0
+\end{equation}
+
+The known Barker sequences are:
+
+\begin{center}
+\begin{tabular}{clc}
+\toprule
+\textbf{Length} & \textbf{Sequence} & \textbf{Peak/sidelobe} \\
+\midrule
+2  & $+{+}-$                                     & 2 \\
+3  & $+{+}-$                                     & 3 \\
+4  & $+{+}-{+}$                                  & 4 \\
+5  & $+{+}{+}-{+}$                               & 5 \\
+7  & $+{+}{+}--{+}-$                             & 7 \\
+11 & $+{+}{+}---{+}--{+}-$                       & 11 \\
+13 & $+{+}{+}{+}{+}--{+}{+}-{+}-{+}$            & 13 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+No Barker sequence of length $> 13$ is known to exist.
+
+\paragraph{Why Barker works for frame sync in single-carrier systems.}
+In a single-carrier link, the preamble has one job: mark the frame boundary.
+A length-13 Barker sequence gives a correlation peak of 13 with sidelobes
+$\leq 1$ (ratio 13:1), which is sufficient to detect the frame start
+reliably at moderate SNR.
+
+\paragraph{Why we use ZC instead for OFDM.}
+Our preamble has \emph{two} jobs: timing \emph{and} channel estimation over
+all 52 active subcarriers.  A Barker sequence has only 13 values, so mapping
+it to frequency gives at most 13 known subcarrier values --- too few for
+accurate channel estimation across 52 subcarriers.
+
+ZC gives 52 known values simultaneously, one per active subcarrier, with
+flat power across the band so every subcarrier is estimated with equal
+accuracy.
+
+\paragraph{If we separated the two roles} (as 802.11a does), Barker would be
+an excellent choice for the timing-only part: binary, no complex arithmetic,
+mathematically proven sidelobe bound, and familiar from single-carrier
+courses.  The separate channel estimation symbol could then be a ZC or any
+other flat-spectrum known sequence.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Block 1: DC Removal and AGC}
