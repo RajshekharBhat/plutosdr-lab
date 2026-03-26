@@ -8,6 +8,11 @@
 \usepackage{booktabs}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+\usepackage{mdframed}
+\newmdenv[linewidth=1pt, linecolor=black!40, backgroundcolor=blue!4,
+          innertopmargin=8pt, innerbottommargin=8pt,
+          frametitle={\small\textbf{For the curious ---}},
+          frametitlealignment=\raggedright]{curiositybox}
 
 \hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
 
@@ -254,6 +259,33 @@ an excellent choice for the timing-only part: binary, no complex arithmetic,
 mathematically proven sidelobe bound, and familiar from single-carrier
 courses.  The separate channel estimation symbol could then be a ZC or any
 other flat-spectrum known sequence.
+
+\begin{curiositybox}
+\textbf{Is ZC uniquely good for channel estimation?}
+
+For LS channel estimation the MSE at subcarrier $k$ is
+$\sigma^2/|X[k]|^2$.  The only requirement on the training sequence is
+\textbf{equal amplitude on all pilot subcarriers} ($|X[k]| = \text{const}$)
+--- this minimises and equalises the noise amplification.
+ZC satisfies this ($|x[n]|=1$), but so does any other constant-amplitude
+sequence: all-ones, random BPSK ($\pm 1$), or even Barker extended to the
+required length.  ZC is \emph{not} theoretically superior to these for
+estimation quality alone.
+
+In practice, what matters far more than the sequence values is
+\textbf{pilot placement}: pilots must be uniformly spaced in frequency
+(spacing $\leq F_s/(N\,\tau_{\max})$) and dense enough in time to track
+the channel coherence time $T_c$.
+
+Real standards reflect this.  Wi-Fi 802.11a uses a predefined $\pm1/\pm j$
+sequence (chosen by exhaustive search for low PAPR, not by formula) for its
+Long Training Sequence and gets the same LS estimation quality as ZC.
+LTE uses ZC-based DMRS pilots on a \emph{comb} pattern (every 6th
+subcarrier, updated every 7 symbols) and relies on interpolation between
+pilots --- the ZC choice there is for its flexibility in length and its
+dual role in synchronisation, not for any estimation advantage over other
+unit-amplitude sequences.
+\end{curiositybox}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Block 1: DC Removal and AGC}
