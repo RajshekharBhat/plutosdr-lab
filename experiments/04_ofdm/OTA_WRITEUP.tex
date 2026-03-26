@@ -80,8 +80,12 @@ The transmitter sends a cyclic stream of identical frames:
 \end{center}
 
 Each symbol is 80 samples: 16-sample cyclic prefix (CP) + 64-sample IFFT output.
-The two identical preamble symbols serve a dual purpose: the first gives the
-timing reference and the channel estimate; the pair enables CFO estimation.
+The two identical preamble symbols each serve a specific role:
+\begin{itemize}
+  \item \textbf{Timing}: both preambles together (paired-peak detector, \S\ref{sec:timing})
+  \item \textbf{CFO estimation}: phase difference between the two FFTs (\S3)
+  \item \textbf{Channel estimation}: preamble-1 FFT only (\S5)
+\end{itemize}
 
 \subsection{Subcarrier Map (64-point FFT)}
 
@@ -153,13 +157,17 @@ Here $N_u = 52$ (number of active subcarriers), $q = 1$.
 \subsection{Why ZC?}
 
 \begin{enumerate}
-  \item \textbf{Constant envelope}: $|x[n]| = 1$ for all $n$.
-        No PAPR penalty from the preamble.
-  \item \textbf{Flat spectrum}: the IFFT of a frequency-domain ZC sequence has
-        nearly constant envelope in time domain too, giving low PAPR.
-  \item \textbf{Sharp autocorrelation}: $|R_{xx}[\tau]| = 0$ for
+  \item \textbf{Constant amplitude (CAZAC)}: $|x[n]| = 1$ for all $n$ ---
+        the sequence has \emph{Constant Amplitude Zero AutoCorrelation}.
+        No subcarrier carries more power than any other.
+  \item \textbf{Perfect periodic autocorrelation}: $|R_{xx}[\tau]| = 0$ for
         $\tau \neq 0 \pmod{N_u}$, so the cross-correlation with the reference
-        gives a single clean spike, enabling precise timing.
+        produces a single sharp spike.  This gives unambiguous, sample-accurate
+        timing.
+  \item \textbf{Flat magnitude spectrum}: placing ZC values on all 52 active
+        subcarriers gives a nearly uniform power spectral density, which means
+        every active subcarrier contributes equally to channel estimation ---
+        no subcarrier is better illuminated than another.
   \item \textbf{Known to both sides}: the RX stores the reference time-domain
         signal $\mathbf{p}$ computed from the same formula; no side channel
         needed.
@@ -375,10 +383,10 @@ H_all = (np.interp(np.arange(64), ACTIVE_IDX, np.real(H_active)) +
 
 \subsection{Why Use the Preamble, Not Pilots?}
 
-Pilots (4 subcarriers per symbol) give only 4 channel samples per data symbol,
-which is too sparse for interpolation in a frequency-selective channel.
-The preamble gives 52 samples in one shot before any data arrives, at no
-throughput cost since the preamble is overhead anyway.
+The preamble gives 52 channel samples across the band in one shot, before any
+data arrives, at no additional throughput cost.  The 4 pilot subcarriers per
+data symbol would give a much coarser 4-point estimate.  For a short burst over
+a static channel, the single preamble estimate is sufficient.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Block 6: Zero-Forcing Equalisation}
@@ -450,32 +458,57 @@ This is identical to the simulation version --- the channel and sync pipeline
 has done all the work to present clean constellation points to this stage.
 
 % ─────────────────────────────────────────────────────────────────────────────
-\section{EVM: How Healthy Is the Link?}
+\section{Preamble Quality Score}
 
-Error Vector Magnitude (EVM) is measured on the 4 pilot subcarriers of the
-preamble.  After LS estimation, $\hat{H}[k_p]/X_{\text{ZC}}[k_p]$ should equal
-1 for a perfect channel.  The deviation is the error vector:
+The code reports a link quality metric derived from the preamble channel
+estimate.  It is \textbf{not} standard EVM (which would require comparing
+equalized data symbols to the ideal constellation).
+
+\subsection{What the Code Computes}
+
+After LS estimation, $\hat{H}[k]$ is the channel at each active subcarrier.
+For a perfect flat channel with unit gain and zero phase, $\hat{H}[k] = 1$.
+The code measures the deviation of the channel estimate at the 4 pilot
+subcarrier positions from this ideal:
 \begin{equation}
-  \text{EVM} = 10\log_{10}\!\left(\frac{1}{4}\sum_{p}
+  Q = 10\log_{10}\!\left(\frac{1}{4}\sum_{p \in \text{pilots}}
     \left|\hat{H}[k_p] - 1\right|^2\right) \text{ dB}
 \end{equation}
 
-Typical values observed on the bench:
+This is a \emph{channel quality score}: it is large (positive dB) when the
+channel has significant gain variation or phase shift across the band, and
+small (negative dB) only for a near-ideal flat channel.
+
+\subsection{Why It Is Not Standard EVM}
+
+Standard EVM compares the received equalized constellation point to the ideal
+transmitted symbol:
+\begin{equation}
+  \text{EVM}_{\text{std}} = \sqrt{\frac{\sum_k |\hat{S}[k] - S[k]|^2}
+    {\sum_k |S[k]|^2}}
+\end{equation}
+This requires knowing the transmitted symbols $S[k]$, which the RX does not
+have without decision feedback or a known pilot sequence per data symbol.
+
+\subsection{Interpreting the Reported Values}
+
 \begin{center}
 \begin{tabular}{ll}
 \toprule
-\textbf{EVM (dB)} & \textbf{Interpretation} \\
+\textbf{Reported Q (dB)} & \textbf{Interpretation} \\
 \midrule
-$< -25$ & Excellent (BER$\approx$0 for QAM64) \\
-$-20$ to $-10$ & Good (QPSK and QAM16 work reliably) \\
-$-5$ to $0$ & Marginal (QPSK may still work) \\
-$> 0$ & Poor (likely sync failure or deep fade) \\
+$< 0$ & Channel is nearly flat and unit-gain at pilots \\
+$0$--$10$ & Moderate channel variation; QPSK typically still works \\
+$> 15$ & Significant channel non-flatness or phase offset; decode may degrade \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-In the OTA test reported here, EVM was 11--15\,dB (i.e.\ $-11$ to $-15$\,dB),
-giving BER~$= 0$ for QPSK.
+In the OTA test here, Q was $+11$ to $+15$\,dB, indicating a moderately
+frequency-selective channel between the two Plutos.  BER was still 0 for QPSK
+because the LS channel estimate correctly captured $\hat{H}[k]$ and the ZF
+equaliser divided it out --- the magnitude of $\hat{H}[k]$ does not need to be 1
+for decoding to succeed; it just needs to be estimated accurately.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Hardware Details: Cyclic TX Buffer}
