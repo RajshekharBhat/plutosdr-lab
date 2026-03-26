@@ -285,6 +285,26 @@ subcarrier, updated every 7 symbols) and relies on interpolation between
 pilots --- the ZC choice there is for its flexibility in length and its
 dual role in synchronisation, not for any estimation advantage over other
 unit-amplitude sequences.
+
+\medskip
+\textbf{Then why does 5G use Gold sequences instead of ZC for DMRS?}
+
+Equal amplitude is necessary but not sufficient in a multi-cell system.
+When neighbouring cells transmit pilots simultaneously, if they use the
+same sequence your channel estimate becomes
+$\hat{H} = H_{\text{desired}} + H_{\text{interferer}}$
+--- the interfering channel leaks in directly.  This is called
+\textbf{pilot contamination}.
+
+Gold sequences (based on a degree-31 generator polynomial) provide
+$\approx 2^{31}$ distinct sequences, each with low cross-correlation to
+all others.  The seed encodes cell ID, UE ID, slot, and symbol number,
+so every user in every cell in the world gets a unique pilot that looks
+like noise to everyone else.  ZC of length $N$ gives at most $N-1$
+distinct sequences --- sufficient for one cell, but not for dense
+deployments.  Both have unit amplitude and give the same LS MSE in
+isolation; Gold sequences are chosen purely for \emph{scalability and
+interference suppression}, not estimation quality.
 \end{curiositybox}
 
 % ─────────────────────────────────────────────────────────────────────────────
