@@ -149,10 +149,18 @@ symbol using the pilot subcarriers --- see Exercise~6.
 
 A Zadoff-Chu (ZC) sequence of length $N_u$ with root $q$ is:
 \begin{equation}
-  x[n] = \exp\!\left(-j\pi q\,\frac{n(n+1)}{N_u}\right), \quad n = 0,1,\ldots,N_u-1
+  x[n] = \begin{cases}
+    \exp\!\left(-j\pi q\,\dfrac{n(n+1)}{N_u}\right) & N_u \text{ odd} \\[8pt]
+    \exp\!\left(-j\pi q\,\dfrac{n^2}{N_u}\right)     & N_u \text{ even}
+  \end{cases}
+  \quad n = 0,1,\ldots,N_u-1
 \end{equation}
 
-Here $N_u = 52$ (number of active subcarriers), $q = 1$.
+Here $N_u = 52$ (number of active subcarriers, \textbf{even}), $q = 1$.
+In LTE/5G, ZC sequences always use odd prime lengths (e.g.\ 839 in LTE PSS)
+to guarantee the CAZAC property unambiguously.  For our $N_u=52$, $q=1$
+case, $\gcd(q, N_u)=1$ ensures perfect cyclic autocorrelation under the
+even-$N$ formula.
 
 \subsection{Why ZC?}
 
@@ -627,7 +635,7 @@ print('released')
 \textbf{Block} & \textbf{Why not in simulation?} & \textbf{Key formula} \\
 \midrule
 ZC preamble & known ref for correlation + ch.\ est. &
-  $x[n]=e^{-j\pi n(n+1)/N_u}$ \\
+  $x[n]=e^{-j\pi n^2/N_u}$ (even $N_u$) \\
 Paired-peak timing & TX/RX async; buffer is a stream &
   $\hat{n}=\arg\max(\hat{C}[n]+\hat{C}[n+80])$ \\
 CFO estimation & independent oscillators &
